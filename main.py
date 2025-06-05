@@ -6,6 +6,9 @@ from google import genai
 from dotenv import load_dotenv
 from openai import OpenAI
 from utils import encode_image
+import base64
+from PIL import Image
+from io import BytesIO
 
 load_dotenv()
 
@@ -20,6 +23,7 @@ clientOpenAi = OpenAI(
     api_key=api_key,
     base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
 )
+
 
 def gemini(content):
     return clientGemini.models.generate_content(
@@ -39,7 +43,8 @@ def openAiCallingGemini(content):
         ]
     ).choices[0].message.content
 
-def encodeImage(content):
+
+def imageUnderstanding(content):
     base64_image = encode_image(uploaded_file)
     return clientOpenAi.chat.completions.create(
         model="gemini-2.0-flash",
@@ -62,21 +67,35 @@ def encodeImage(content):
         ],
     ).choices[0].message.content
 
+def generateAnImage(content):
+    response = clientOpenAi.images.generate(
+        model="imagen-3.0-generate-002",
+        prompt=content,
+        response_format='b64_json',
+        n=1,
+    )
+    # Decode the base64 image
+    image_data = response.data[0].b64_json
+    image = Image.open(BytesIO(base64.b64decode(image_data)))
+    return image
+
+
+
 func_map = {
     "Google Gemini": gemini,
     "OpenAI Gemini": openAiCallingGemini,
-    "Image Encoding": encodeImage,
+    "Image understanding": imageUnderstanding,
+    "Generate an image": generateAnImage,
 }
-
-
 
 # Select which method to use
 method = st.sidebar.selectbox("Choose API method", list(func_map.keys()))
 st.title(f"🌐 Ask to {method}")
-content = st.text_input("Enter a question:")
+content = st.text_input("Prompt Here:")
 uploaded_file = None
 if method == "Image Encoding":
     uploaded_file = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png"])
+
 
 
 if st.button("Ask"):
@@ -86,15 +105,22 @@ if st.button("Ask"):
         if uploaded_file is None:
             st.error("❌ Please upload an image before clicking Ask.")
         else:
-            with st.spinner("Thinking..."):
-                summary = func_map[method](content)
-                st.subheader("📄 Answer:")
-                st.write(summary)
+            if not content:
+                st.error("❌ Please enter a question before clicking Ask.")
+            else:
+                with st.spinner("Thinking..."):
+                    result = func_map[method](content)
+                    st.subheader("📄 Answer:")
+                    st.write(result)
     else:
         if not content:
             st.error("❌ Please enter a question before clicking Ask.")
         else:
             with st.spinner("Thinking..."):
-                summary = func_map[method](content)
-                st.subheader("📄 Answer:")
-                st.write(summary)
+                result = func_map[method](content)
+                if method == "Image Generation":  # or whatever label you used
+                    st.subheader("🖼️ Generated Image:")
+                    st.image(result)
+                else:
+                    st.subheader("📄 Answer:")
+                    st.write(result)
