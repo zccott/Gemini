@@ -1,9 +1,11 @@
+import base64
 import os
 import streamlit as st
 from distributed.utils_test import client
 from google import genai
 from dotenv import load_dotenv
 from openai import OpenAI
+from utils import encode_image
 
 load_dotenv()
 
@@ -37,24 +39,62 @@ def openAiCallingGemini(content):
         ]
     ).choices[0].message.content
 
+def encodeImage(content):
+    base64_image = encode_image(uploaded_file)
+    return clientOpenAi.chat.completions.create(
+        model="gemini-2.0-flash",
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": content,
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/jpeg;base64,{base64_image}"
+                        },
+                    },
+                ],
+            }
+        ],
+    ).choices[0].message.content
+
 func_map = {
     "Google Gemini": gemini,
     "OpenAI Gemini": openAiCallingGemini,
+    "Image Encoding": encodeImage,
 }
+
+
 
 # Select which method to use
 method = st.sidebar.selectbox("Choose API method", list(func_map.keys()))
 st.title(f"🌐 Ask to {method}")
 content = st.text_input("Enter a question:")
+uploaded_file = None
+if method == "Image Encoding":
+    uploaded_file = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png"])
+
 
 if st.button("Ask"):
     if not api_key:
-        st.sidebar.warning("you need to enter your API key")
-    else:
-        with st.spinner("Thinking..."):
-            summary = func_map[method](content)
-            if not content.startswith("Error"):
+        st.sidebar.warning("You need to enter your API key.")
+    elif method == "Image Encoding":
+        if uploaded_file is None:
+            st.error("❌ Please upload an image before clicking Ask.")
+        else:
+            with st.spinner("Thinking..."):
+                summary = func_map[method](content)
                 st.subheader("📄 Answer:")
                 st.write(summary)
-            else:
-                st.error(content)
+    else:
+        if not content:
+            st.error("❌ Please enter a question before clicking Ask.")
+        else:
+            with st.spinner("Thinking..."):
+                summary = func_map[method](content)
+                st.subheader("📄 Answer:")
+                st.write(summary)
